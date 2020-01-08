@@ -44,7 +44,7 @@ $ diskutil unmountDisk /dev/diskX
 [Raspberry Pi Installing Images Source(Windows Directions)](https://www.raspberrypi.org/documentation/installation/installing-images/mac.md)  
 - On your local computer, flash the image to the card (Windows use Etcher)
 ```
--  $ sudo dd bs=1m if=/Users/‘Luke Barousse’/Desktop/2019-09-26-raspbian-buster-full.img of=/dev/rdiskN conv=sync (15-20 minutes)
+$ sudo dd bs=1m if=/Users/‘Luke Barousse’/Desktop/2019-09-26-raspbian-buster-full.img of=/dev/rdiskN conv=sync (15-20 minutes)
 #check progress with (Ctrl + t)
 ```
 - When done, eject the disk
@@ -74,7 +74,7 @@ $ ifconfig
 ### 6) Set up to connect via shell (SSH)
 - On Pi, go to configuriation settings
 ```
-- $ sudo raspi-config
+$ sudo raspi-config
 ```
 - Select option #5 then #2, and enable SSH
 - Shutdown, if moving and removing peripherals: 
@@ -110,7 +110,7 @@ $ sudo apt install realvnc-vnc-server realvnc-vnc-viewer
 - Enable VNC on pi
 ```
 $ sudo raspi-config
-- Interface Options > VNC > Yes
+# Interface Options > VNC > Yes
 ```
 - Start VNC
 ```
@@ -130,7 +130,7 @@ $ vncserver -kill :1
 ```
 
 ### 10) (Optional) Install External Storage
-NOTE: Prior to beginning I partitioned the hard drive with 1TB for regular files (ExFat) and 1 TB for Mac OS extended -Journaled (hfsplus) (I.e. time machine)
+NOTE: Prior to beginning I partitioned the hard drive with 1TB for regular files (ExFat) and 1 TB for Mac OS extended -Journaled (hfsplus - i.e., time machine)
 - On Pi, list all the disk partitions
 ```
 $ sudo lsblk -o UUID,NAME,FSTYPE,SIZE,MOUNTPOINT,LABEL,MODEL
@@ -180,7 +180,7 @@ $ sudo chown pi:pi /mnt/tm
 ```
 - To access after reboot edit the fstab
 ```
-- $ sudo nano /etc/fstab
+$ sudo nano /etc/fstab
 
 # Replace FSTTYPE with Type (exfat or hfsplus) (noauto specified to not load on startup, load on startup is not consistent)
 UUID=5C24-1453 /mnt/2tbhd FSTYPE force,rw,user,noauto 0 0
@@ -190,10 +190,10 @@ UUID=5C24-1453 /mnt/2tbhd FSTYPE force,rw,user,noauto 0 0
 $ sudo crontab -e
 
 # append the following
-@reboot sleep 20 && sudo mount /media/tm >> /home/pi/TimeMachineMountStartUp.log 2>&1
-@reboot sleep 25 && sudo chmod -R 777 /media/tm >> /home/pi/TimeMachineCHMOD.log 2>&1
-@reboot sleep 40 && sudo service avahi-daemon start >> /home/pi/Avahi-DaemonServiceStartup.log 2>&1
-@reboot sleep 50 && sudo service netatalk start >> /home/pi/NetatalkServiceStartUp.log 2>&1
+@reboot sleep 30 && sudo mount /media/tm >> /home/pi/TimeMachineMountStartUp.log 2>&1
+@reboot sleep 40 && sudo chmod -R 777 /media/tm >> /home/pi/TimeMachineCHMOD.log 2>&1
+@reboot sleep 50 && sudo service avahi-daemon start >> /home/pi/Avahi-DaemonServiceStartup.log 2>&1
+@reboot sleep 60 && sudo service netatalk start >> /home/pi/NetatalkServiceStartUp.log 2>&1
 ```
 - If necessary, to unmount
 ```
@@ -294,8 +294,7 @@ $ sudo blkid
 #repairing time machine
 $ sudo fsck.hfsplus -f /dev/sda2
 ```
-2. If errors with connecting or backup (Noted during initial download)
-- reboot the raspberry
-- restart computer
+2. If errors with connecting or backing up (Noted during initial download)
+- reboot the pi
+- restart/shutdown local computer
 - reconnect to server
-3. If setting up initially after moving, reset the fixed IP address assigned by router
