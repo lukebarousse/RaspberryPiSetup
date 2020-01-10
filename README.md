@@ -1,6 +1,7 @@
 # Raspberry Pi Initial Setup
 ------
 ### Sources:  
+[Paul Mucur - Using a Raspberry Pi for a Time Machine](https://mudge.name/2019/11/12/using-a-raspberry-pi-for-time-machine/)  
 [Gregology - Raspberry Pi Time Machine](https://gregology.net/2018/09/raspberry-pi-time-machine/)  
 [Raspberry Pi - Installing Images](https://www.raspberrypi.org/documentation/installation/installing-images/mac.md)  
 [Pi my lifeup - Apple File Protocol](https://pimylifeup.com/raspberry-pi-afp/)  
@@ -18,8 +19,7 @@
 9) Set up Remote Desktop (Optional)
 10) Install External Storage (Optional)
 11) Set up File Sharing (Optional)
-12) Autoconnect to Network (MacOS-Only)  
-13) EXTRA: Troubleshooting
+12) EXTRA: Troubleshooting
 ------
 ### 1) Download OS for Pi
 [Raspberry Pi - Raspian Download](https://www.raspberrypi.org/downloads/raspbian/)  
@@ -174,33 +174,135 @@ $ ls /mnt/tm
 ```
 $ sudo chmod 777 /mnt/tm
 ```
-- Change permissions of the directory (may need to run again at end for troubleshooting)
+- Create a seperate user for storing backups to match the username on your local computer
 ```
-$ sudo chown pi:pi /mnt/tm
+sudo adduser username
+```
+- Change permissions of the pi home and mounted directory
+```
+$ sudo chown username: /mnt/tm
+$ sudo chown username: /home/pi
 ```
 - To access after reboot edit the fstab
 ```
 $ sudo nano /etc/fstab
 
-# Replace FSTTYPE with Type (exfat or hfsplus) (noauto specified to not load on startup, load on startup is not consistent)
+# Replace FSTTYPE with Type (exfat or hfsplus)
+# noauto specified to not load on startup, load on startup is flaky
 UUID=5C24-1453 /mnt/2tbhd FSTYPE force,rw,user,noauto 0 0
 ```
-- To auto mount after reboot edit crontab (commands to execute on startup after a set amount of time to make sure drives loaded properly):
+- To auto mount after reboot edit crontab (crontab is commands to execute on startup after a set amount of time to make sure drives loaded properly):
 ```
 $ sudo crontab -e
 
 # append the following
 @reboot sleep 30 && sudo mount /media/tm >> /home/pi/TimeMachineMountStartUp.log 2>&1
 @reboot sleep 40 && sudo chmod -R 777 /media/tm >> /home/pi/TimeMachineCHMOD.log 2>&1
-@reboot sleep 50 && sudo service avahi-daemon start >> /home/pi/Avahi-DaemonServiceStartup.log 2>&1
-@reboot sleep 60 && sudo service netatalk start >> /home/pi/NetatalkServiceStartUp.log 2>&1
 ```
-- If necessary, to unmount
+- If using a spinning disk HDD and Time Machine doesn’t run constantly, put the disk in standby after 10 minutes of inactivity. To do this, we’ll need to install hdparm to set a standby (spindown) timeout in 5 second increments, again identifying our disk by its UUID:
 ```
-$ sudo umount /mnt/tm
+$ sudo apt install hdparm
+$ sudo hdparm -S 120 /dev/disk/by-uuid/e613b4f3-7fb8-463a-a65d-42a14148ea65
+```
+- Make this permanent by adding the following stanza to /etc/hdparm.conf:
+``` 
+$ sudo nano /etc/hdparm.conf
+
+#add to bottom of file
+/dev/disk/by-uuid/e613b4f3-7fb8-463a-a65d-42a14148ea65 {
+	spindown_time = 120
+}
 ```
 
-### 11a) (Optional) Set up Netatalk for file sharing (MacOS)
+### 11a) (Optional) Set up Samba for file sharing (recommended-option)  
+[Using a Raspberry Pi for Time Machine](https://mudge.name/2019/11/12/using-a-raspberry-pi-for-time-machine/)
+- On Pi, if not done recently, ensure everything up to date
+```
+$ sudo apt update && sudo apt upgrade
+```
+- Install Samba
+```
+$ sudo apt-get install samba
+```
+- Edit the SMB config file
+```
+$ sudo nano /etc/samba/smb.conf
+
+# The following already exists, just make minor changes, this only adds the directory for the username you created above
+[homes]
+	browseable = No 
+	comment = Home Directories
+	create mask = 0700
+	directory mask = 0700
+	read only = No   #Changed from Yes to No
+	valid users = username      #Add the User Name
+
+# The following doesn't exist and needs to be added
+[backups]
+    comment = Backups
+    path = /mnt/TimeMachine
+    valid users = username
+    read only = no
+    vfs objects = catia fruit streams_xattr
+    fruit:time machine = yes
+
+# The following doesn't exist and needs to be added to get your pi home directory
+[Pi Directory]
+	comment = Pi Directory
+	path = /home/pi
+	read only = No
+	valid users = username
+
+# The following doesn't exist and needs to be added if you partitioned your hard drive with a time machine and regular file system
+[Files]
+	comment = Files
+	path = /mnt/Files
+	read only = No
+	valid users = pi
+```
+- Add username to Samba's password file and set password; This is the username and password to connect to pi from mac
+```
+$ sudo smbpasswd -a username
+```
+- Run testparm to check our configuration is free of errors
+``` 
+$ sudo testparm -s
+```
+- Reload Samba configuration
+```
+$ sudo service smbd reload
+```
+- Configure Avahi to load pi automatically in finder by editing samba.service file
+``` 
+$ sudo nano /etc/avahi/services/samba.service
+
+# add the following to the file, this will adviertise the pi as AirPort Time Capsule
+<?xml version="1.0" standalone='no'?><!--*-nxml-*-->
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<service-group>
+  <name replace-wildcards="yes">%h</name>
+  <service>
+    <type>_smb._tcp</type>
+    <port>445</port>
+  </service>
+  <service>
+    <type>_device-info._tcp</type>
+    <port>9</port>
+    <txt-record>model=TimeCapsule8,119</txt-record>
+  </service>
+  <service>
+    <type>_adisk._tcp</type>
+    <port>9</port>
+    <txt-record>dk0=adVN=backups,adVF=0x82</txt-record>
+    <txt-record>sys=adVF=0x100</txt-record>
+  </service>
+</service-group>
+```
+- On local computer, open Finder and select raspberry pi in sidebar
+- Click 'Connect As...', and login with username and password defined above
+- Make sure to check box to save credentials for future reboots
+
+### 11b) (Optional) Set up Netatalk for file sharing (not recommended, I encountered many issues after install)
 [Apple File Protocol](https://pimylifeup.com/raspberry-pi-afp/)  
 [Using Pi as Time Machine](https://www.howtogeek.com/276468/how-to-use-a-raspberry-pi-as-a-networked-time-machine-drive-for-your-mac/)  
 - On Pi, ensure everything up to date
@@ -240,53 +342,25 @@ $ sudo service netatalk start
 - Connect to Raspberry Pi by typing CMD + k (Mac), type 'afp://192.168.1.100'
 - Connect via default username (pi) and passoword (raspberry)
 - Select volumes to mount (i.e., Shared Pi2TBHDD)
-
-### 11b) (Optional) Set up Samba for file sharing (Windows Computer)
-- On Pi, install Samba
-```
-$ sudo apt-get install samba samba-common-bin
-```
-- Create a shared directory, putting it in ‘shared’ in the hard drive
-```
-$ sudo mkdir -m 1777 /mnt/2tbhd/shared
-```
-- Edit the Samba config file
-```
-$ sudo nano /etc/samba/smb.conf
-
-#Edit the file as shown below
-[Shared Pi2TBHDD]
-Comment = Shared Folder
-Path = /mnt/2tbhd/shared
-Browseable = yes
-Writeable = Yes
-only guest = no
-create mask = 0777
-directory mask = 0777
-Public = yes
-Guest ok = yes
-```
-- Restart Samba
-```
-$ sudo /etc/init.d/samba restart
-```
-
-### 12) (Optional) Setup Auto-connect to Network Drive (MacOS-Only)
+- Setup Auto-connect to Network Drive (MacOS-Only)
 - On Mac open System Preferences > Users & Groups
 - Select UserName (Unlock, if necessary) & select 'Login Items'
 - Click + and navigate to folders from drive to add
 - Check 'Hide' box to keep windows from opening on login/boot
 
-### 13) EXTRA: Troubleshooting
+### 12) EXTRA: Troubleshooting
+1. If you have any trouble connecting (especially if you have changed your user credentials at all), it’s worth using the Keychain Access application in /Applications/Utilities to check for any cached network passwords and delete old entries.  
+1. You may also need to forcibly relaunch the Finder by holding down the Option key and right-clicking on its icon in the Dock and choosing the Relaunch option at the bottom of the resulting menu.
+
 1. If saying Time Machine is read-only can change the permissions of directory
 ```
-# determine location of mount for Time machine
+# determine location of mount for drive
 $ sudo lsblk -o UUID,NAME,FSTYPE,SIZE,MOUNTPOINT,LABEL,MODEL
 
 # then insert correct location from MOUNTPOINT
-$ sudo chown pi:pi /mnt/TimeMachine
+$ sudo chown username: /mnt/TimeMachine
 ```
-OR forcing fsck.hfsplus to check and repair journaled HFS+ file systems
+ forcing fsck.hfsplus to check and repair journaled HFS+ file systems
 ```
 #determine location of mount for Time machine or using NAME column above
 $ sudo blkid 
@@ -294,7 +368,7 @@ $ sudo blkid
 #repairing time machine
 $ sudo fsck.hfsplus -f /dev/sda2
 ```
-2. If errors with connecting or backing up (Noted during initial download)
+1. If errors with connecting or backing up (Noted during initial download)
 - reboot the pi
 - restart/shutdown local computer
 - reconnect to server
