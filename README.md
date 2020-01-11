@@ -199,7 +199,7 @@ $ sudo crontab -e
 @reboot sleep 30 && sudo mount /media/tm >> /home/pi/TimeMachineMountStartUp.log 2>&1
 @reboot sleep 40 && sudo chmod -R 777 /media/tm >> /home/pi/TimeMachineCHMOD.log 2>&1
 ```
-- If using a spinning disk HDD and Time Machine doesn’t run constantly, put the disk in standby after 10 minutes of inactivity. To do this, we’ll need to install hdparm to set a standby (spindown) timeout in 5 second increments, again identifying our disk by its UUID:
+- If using a spinning disk HDD (as Time Machine doesn’t run constantly), put the disk in standby after 10 minutes of inactivity. To do this, we’ll need to install hdparm to set a standby (spindown) timeout in 5 second increments, again identifying our disk by its UUID:
 ```
 $ sudo apt install hdparm
 $ sudo hdparm -S 120 /dev/disk/by-uuid/e613b4f3-7fb8-463a-a65d-42a14148ea65
@@ -214,9 +214,9 @@ $ sudo nano /etc/hdparm.conf
 }
 ```
 
-### 11a) (Optional) Set up Samba for file sharing (recommended-option)  
+### 11a) (Optional) Set up Samba (SMB) for file sharing (recommended-option)  
 [Using a Raspberry Pi for Time Machine](https://mudge.name/2019/11/12/using-a-raspberry-pi-for-time-machine/)
-- On Pi, if not done recently, ensure everything up to date
+- On Pi, if not done recently, ensure everything is up to date
 ```
 $ sudo apt update && sudo apt upgrade
 ```
@@ -234,12 +234,12 @@ $ sudo nano /etc/samba/smb.conf
 	comment = Home Directories
 	create mask = 0700
 	directory mask = 0700
-	read only = No   #Changed from Yes to No
+	read only = No              #Changed from Yes to No
 	valid users = username      #Add the User Name
 
 # The following doesn't exist and needs to be added
-[backups]
-    comment = Backups
+[TimeMachine]
+    comment = Time Machine
     path = /mnt/TimeMachine
     valid users = username
     read only = no
@@ -247,15 +247,15 @@ $ sudo nano /etc/samba/smb.conf
     fruit:time machine = yes
 
 # The following doesn't exist and needs to be added to get your pi home directory
-[Pi Directory]
+[PiDirectory]
 	comment = Pi Directory
 	path = /home/pi
 	read only = No
 	valid users = username
 
 # The following doesn't exist and needs to be added if you partitioned your hard drive with a time machine and regular file system
-[Files]
-	comment = Files
+[FilesDirectory]
+	comment = FilesDirectory
 	path = /mnt/Files
 	read only = No
 	valid users = pi
@@ -293,7 +293,7 @@ $ sudo nano /etc/avahi/services/samba.service
   <service>
     <type>_adisk._tcp</type>
     <port>9</port>
-    <txt-record>dk0=adVN=backups,adVF=0x82</txt-record>
+    <txt-record>dk0=adVN=TimeMachine,adVF=0x82</txt-record>       #this name must match name in brackets from smb.conf
     <txt-record>sys=adVF=0x100</txt-record>
   </service>
 </service-group>
@@ -302,7 +302,7 @@ $ sudo nano /etc/avahi/services/samba.service
 - Click 'Connect As...', and login with username and password defined above
 - Make sure to check box to save credentials for future reboots
 
-### 11b) (Optional) Set up Netatalk for file sharing (not recommended, I encountered many issues after install)
+### 11b) (Optional) Set up Netatalk (AFP) for file sharing (not recommended, I encountered many issues after install)
 [Apple File Protocol](https://pimylifeup.com/raspberry-pi-afp/)  
 [Using Pi as Time Machine](https://www.howtogeek.com/276468/how-to-use-a-raspberry-pi-as-a-networked-time-machine-drive-for-your-mac/)  
 - On Pi, ensure everything up to date
@@ -350,9 +350,8 @@ $ sudo service netatalk start
 
 ### 12) EXTRA: Troubleshooting
 1. If you have any trouble connecting (especially if you have changed your user credentials at all), it’s worth using the Keychain Access application in /Applications/Utilities to check for any cached network passwords and delete old entries.  
-1. You may also need to forcibly relaunch the Finder by holding down the Option key and right-clicking on its icon in the Dock and choosing the Relaunch option at the bottom of the resulting menu.
-
-1. If saying Time Machine is read-only can change the permissions of directory
+1. You may also need to forcibly relaunch the Finder by holding down the Option key and right-clicking on its icon in the Dock and choosing the Relaunch option at the bottom of the resulting menu.  
+1. If saying Time Machine is read-only need to change the permission of directory
 ```
 # determine location of mount for drive
 $ sudo lsblk -o UUID,NAME,FSTYPE,SIZE,MOUNTPOINT,LABEL,MODEL
@@ -360,7 +359,7 @@ $ sudo lsblk -o UUID,NAME,FSTYPE,SIZE,MOUNTPOINT,LABEL,MODEL
 # then insert correct location from MOUNTPOINT
 $ sudo chown username: /mnt/TimeMachine
 ```
- forcing fsck.hfsplus to check and repair journaled HFS+ file systems
+4. If Time Machine needs repair force fsck.hfsplus to check and repair journaled HFS+ file systems
 ```
 #determine location of mount for Time machine or using NAME column above
 $ sudo blkid 
@@ -368,7 +367,7 @@ $ sudo blkid
 #repairing time machine
 $ sudo fsck.hfsplus -f /dev/sda2
 ```
-1. If errors with connecting or backing up (Noted during initial download)
+5. If errors with connecting or backing up (Noted during initial download)
 - reboot the pi
 - restart/shutdown local computer
 - reconnect to server
