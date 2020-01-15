@@ -35,7 +35,7 @@ $ diskutil list
 ```
 $ diskutil list
 ```
-- Determine disk number from command above (i.e. /dev/diskN) and unmount
+- Determine disk number from command above (i.e. /dev/diskN) and unmount (to prevent 'resource busy' error)
 ```
 $ diskutil unmountDisk /dev/diskX
 ```
@@ -44,8 +44,9 @@ $ diskutil unmountDisk /dev/diskX
 [Raspberry Pi Installing Images Source(Windows Directions)](https://www.raspberrypi.org/documentation/installation/installing-images/mac.md)  
 - On your local computer, flash the image to the card (Windows use Etcher)
 ```
-$ sudo dd bs=1m if=/Users/‘Luke Barousse’/Desktop/2019-09-26-raspbian-buster-full.img of=/dev/rdiskN conv=sync (15-20 minutes)
+$ sudo dd bs=1m if=/Users/UserName/Downloads/2019-09-26-raspbian-buster-full.img of=/dev/rdiskN conv=sync (15-20 minutes)
 #check progress with (Ctrl + t)
+#use rdiskN vice diskN as this expediates the load process
 ```
 - When done, eject the disk
 ```
@@ -170,18 +171,17 @@ $ sudo mount /dev/sda3 /mnt/tm
 ```
 $ ls /mnt/tm
 ```
-- Give read/write/edit permissions
+- Allow read/write/edit permissions for pi (May not be necessary)
 ```
 $ sudo chmod 777 /mnt/tm
 ```
-- Create a seperate user for storing backups to match the username on your local computer
+- Create a separate user for storing backups to match the username on your local computer
 ```
 sudo adduser username
 ```
-- Change permissions of the pi home and mounted directory
+- Change file ownership (recursively) of the mounted directory  
 ```
-$ sudo chown username: /mnt/tm
-$ sudo chown username: /home/pi
+$ sudo chown -R username: /mnt/tm
 ```
 - To access after reboot edit the fstab
 ```
