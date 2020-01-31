@@ -189,15 +189,7 @@ $ sudo nano /etc/fstab
 
 # Replace FSTTYPE with Type (exfat or hfsplus)
 # noauto specified to not load on startup, load on startup is flaky
-UUID=5C24-1453 /mnt/2tbhd FSTYPE force,rw,user,noauto 0 0
-```
-- To auto mount after reboot edit crontab (crontab is commands to execute on startup after a set amount of time to make sure drives loaded properly):
-```
-$ sudo crontab -e
-
-# append the following
-@reboot sleep 30 && sudo mount /media/tm >> /home/pi/TimeMachineMountStartUp.log 2>&1
-@reboot sleep 40 && sudo chmod -R 777 /media/tm >> /home/pi/TimeMachineCHMOD.log 2>&1
+UUID=5C24-1453 /mnt/2tbhd FSTYPE sync,noexec,nodev,noatime,nodiratime 0 0
 ```
 - If using a spinning disk HDD (as Time Machine doesn’t run constantly), put the disk in standby after 10 minutes of inactivity. To do this, we’ll need to install hdparm to set a standby (spindown) timeout in 5 second increments, again identifying our disk by its UUID:
 ```
