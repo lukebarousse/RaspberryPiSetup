@@ -73,7 +73,7 @@ $ ifconfig
 ```
 
 ### 6) Set up to connect via shell (SSH)
-- On Pi, go to configuriation settings
+- On Pi, go to configuration settings
 ```
 $ sudo raspi-config
 ```
@@ -119,7 +119,7 @@ $ vncserver
 # To change default screen size (recommended)
 $ vncserver :1 -geometry 1920x1080 -depth 24
 ```
-- On your local computuer, install RealVNC application on computer: [Real VNC Download](https://www.realvnc.com/en/connect/download/viewer/macos/)
+- On your local computer, install RealVNC application: [Real VNC Download](https://www.realvnc.com/en/connect/download/viewer/macos/)
 - Launch app, and enter IP address screen number: 192.168.1.100:1 (or local Pi IP address chosen)
 - (Optional) File Manager would not open properly for me, so I had to reinstall this:
 ```
@@ -131,7 +131,9 @@ $ vncserver -kill :1
 ```
 
 ### 10) (Optional) Install External Storage
-NOTE: Prior to beginning I partitioned the hard drive with 1TB for regular files (ExFat) and 1 TB for Mac OS extended -Journaled (hfsplus - i.e., time machine)
+[Paul Mucur - Using a Raspberry Pi for a Time Machine](https://mudge.name/2019/11/12/using-a-raspberry-pi-for-time-machine/)  
+NOTE: Prior to beginning I partitioned the hard drive with 1TB for regular files (ExFat) and 1 TB for Mac OS extended -Journaled (hfsplus - i.e., time machine).
+Paul Mucur's Article recommends doing ext4 for Time Machine, but I chose hfs+ because I had already partitioned the drive.
 - On Pi, list all the disk partitions
 ```
 $ sudo lsblk -o UUID,NAME,FSTYPE,SIZE,MOUNTPOINT,LABEL,MODEL
@@ -155,25 +157,35 @@ $ sudo blkid 
 ```
 $ sudo apt-get install hfsutils hfsprogs
 ```
-- Format the selected time machine drive
+- Format the selected Time Machine drive (done again for good measure)
 ```
+#from blkid use appropriate drive (/dev/sda#) and LABEL (timemachine)
 $ sudo mkfs.hfsplus /dev/sda2 -v timemachine
 ```
 - Create location for mount point
 ```
-$ sudo mkdir /mnt/tm
+$ sudo mkdir /mnt/tm   #timemachine directory
+$ sudo mkdir /mnt/files    #files directory
+```
+- To mount on reboot edit the fstab
+```
+$ sudo nano /etc/fstab
+
+# Replace FSTTYPE with Type (exfat or hfsplus)
+# force rw required for hfs+ or mounts as ro
+# uid,gid required to mount to username control (basically chown)
+UUID=5C24-1452  /mnt/tm FSTYPE  force,rw,uid=username,gid=username,sync,noexec,nodev,noatime,nodiratime    0   0
+UUID=5E08-E8AB  /mnt/files      exfat   uid=LukeBarousse,gid=LukeBarousse,sync,noexec,nodev,noatime,nodiratime  0       0
 ```
 - Mount the drive
 ```
-$ sudo mount /dev/sda3 /mnt/tm
+$ sudo mount /dev/sda2 /mnt/tm
+$ sudo mount /dev/sda3 /mnt/files
 ```
 - Verify mounted correctly
 ```
 $ ls /mnt/tm
-```
-- Allow read/write/edit permissions for pi (May not be necessary)
-```
-$ sudo chmod 777 /mnt/tm
+$ ls /mnt/files
 ```
 - Create a separate user for storing backups to match the username on your local computer
 ```
@@ -181,40 +193,33 @@ sudo adduser username
 ```
 - Change file ownership (recursively) of the mounted directory  
 ```
-$ sudo chown -R username: /mnt/tm
+$ sudo chown -R username: /mnt/tm /mnt/files
 ```
-- To access after reboot edit the fstab
-```
-$ sudo nano /etc/fstab
-
-# Replace FSTTYPE with Type (exfat or hfsplus)
-# noauto specified to not load on startup, load on startup is flaky
-UUID=5C24-1453 /mnt/2tbhd FSTYPE sync,noexec,nodev,noatime,nodiratime 0 0
-```
-- If using a spinning disk HDD (as Time Machine doesn’t run constantly), put the disk in standby after 10 minutes of inactivity. To do this, we’ll need to install hdparm to set a standby (spindown) timeout in 5 second increments, again identifying our disk by its UUID:
+- If using a spinning disk HDD, put the disk in standby after 10 minutes of inactivity(as Time Machine doesn't run constantly).
+To do this, we’ll need to install hdparm to set a standby (spindown) timeout in 5 second increments:
 ```
 $ sudo apt install hdparm
-$ sudo hdparm -S 120 /dev/disk/by-uuid/e613b4f3-7fb8-463a-a65d-42a14148ea65
+$ sudo hdparm -S 120 /dev/disk/by-uuid/5C24-1452
 ```
 - Make this permanent by adding the following stanza to /etc/hdparm.conf:
 ``` 
 $ sudo nano /etc/hdparm.conf
 
 #add to bottom of file
-/dev/disk/by-uuid/e613b4f3-7fb8-463a-a65d-42a14148ea65 {
+/dev/disk/by-uuid/5C24-1452 {
 	spindown_time = 120
 }
 ```
 
-### 11a) (Optional) Set up Samba (SMB) for file sharing (recommended-option)  
+### 11a) (Optional) Set up Samba (SMB) for Time Machine and file sharing (recommended-option)  
 [Using a Raspberry Pi for Time Machine](https://mudge.name/2019/11/12/using-a-raspberry-pi-for-time-machine/)
 - On Pi, if not done recently, ensure everything is up to date
 ```
 $ sudo apt update && sudo apt upgrade
 ```
-- Install Samba
+- Install Samba & Avahi
 ```
-$ sudo apt-get install samba
+$ sudo apt-get install samba avahi-daemon
 ```
 - Edit the SMB config file
 ```
@@ -232,7 +237,7 @@ $ sudo nano /etc/samba/smb.conf
 # The following doesn't exist and needs to be added
 [TimeMachine]
     comment = Time Machine
-    path = /mnt/TimeMachine
+    path = /mnt/tm
     valid users = username
     read only = no
     vfs objects = catia fruit streams_xattr
@@ -248,7 +253,7 @@ $ sudo nano /etc/samba/smb.conf
 # The following doesn't exist and needs to be added if you partitioned your hard drive with a time machine and regular file system
 [FilesDirectory]
 	comment = FilesDirectory
-	path = /mnt/Files
+	path = /mnt/files
 	read only = No
 	valid users = pi
 ```
@@ -264,11 +269,12 @@ $ sudo testparm -s
 ```
 $ sudo service smbd reload
 ```
-- Configure Avahi to load pi automatically in finder by editing samba.service file
+- Configure Avahi to load pi automatically (auto-discover) in finder by editing samba.service file
 ``` 
 $ sudo nano /etc/avahi/services/samba.service
 
 # add the following to the file, this will adviertise the pi as AirPort Time Capsule
+# don't forget to change the fourth line from the bottom
 <?xml version="1.0" standalone='no'?><!--*-nxml-*-->
 <!DOCTYPE service-group SYSTEM "avahi-service.dtd">
 <service-group>
@@ -285,7 +291,7 @@ $ sudo nano /etc/avahi/services/samba.service
   <service>
     <type>_adisk._tcp</type>
     <port>9</port>
-    <txt-record>dk0=adVN=TimeMachine,adVF=0x82</txt-record>       #this name must match name in brackets from smb.conf
+    <txt-record>dk0=adVN=timemachine,adVF=0x82</txt-record>       #this name must match name in brackets from smb.conf
     <txt-record>sys=adVF=0x100</txt-record>
   </service>
 </service-group>
@@ -293,6 +299,7 @@ $ sudo nano /etc/avahi/services/samba.service
 - On local computer, open Finder and select raspberry pi in sidebar
 - Click 'Connect As...', and login with username and password defined above
 - Make sure to check box to save credentials for future reboots
+- When you "Select Disk..." in Time Machine Preference Pane make sure you click "Encrypt Backups" for first backup
 
 ### 11b) (Optional) Set up Netatalk (AFP) for file sharing (not recommended, I encountered many issues after install)
 [Apple File Protocol](https://pimylifeup.com/raspberry-pi-afp/)  
@@ -348,8 +355,11 @@ $ sudo service netatalk start
 # determine location of mount for drive
 $ sudo lsblk -o UUID,NAME,FSTYPE,SIZE,MOUNTPOINT,LABEL,MODEL
 
+# determine owner of mounted dives
+$ ls -l /mnt
+
 # then insert correct location from MOUNTPOINT
-$ sudo chown username: /mnt/TimeMachine
+$ sudo chown username: /mnt/timemachine
 ```
 4. If Time Machine needs repair force fsck.hfsplus to check and repair journaled HFS+ file systems
 ```
